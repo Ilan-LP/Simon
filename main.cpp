@@ -1,6 +1,7 @@
 #include "CroixPharma.h"
 #include <unistd.h>
 #include <termios.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <random>
 #include <time.h>
@@ -35,6 +36,28 @@ bool loose = false;
 bool win   = false;
 
 CroixPharma croix;
+
+static struct termios original_termios;
+static bool termios_saved = false;
+
+void restore_input() {
+    if (termios_saved) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &original_termios);
+    }
+}
+
+void handle_signal(int sig) {
+    restore_input();
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+void setup_signal_handlers() {
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+    signal(SIGHUP, handle_signal);
+    signal(SIGQUIT, handle_signal);
+}
 
 static const char *get_sound_player() {
 #ifdef __APPLE__
@@ -79,7 +102,13 @@ void send_frame() {
 
 void setup_input() {
     struct termios t;
-    tcgetattr(STDIN_FILENO, &t);
+    if (tcgetattr(STDIN_FILENO, &t) != 0) {
+        return;
+    }
+
+    original_termios = t;
+    termios_saved = true;
+
     t.c_lflag &= ~(ICANON | ECHO);
     t.c_cc[VMIN]  = 0;
     t.c_cc[VTIME] = 0;
@@ -143,12 +172,12 @@ void show_panel(Panel panel) {
             for (int x = 8; x < 16; x++)
                 set_pixel(x, y, HIGH);
     } else if (panel == PANEL_CENTER) {
-        for (int y = 16; y < 24; y++)
+        for (int y = 8; y < 16; y++)
             for (int x = 8; x < 16; x++)
                 set_pixel(x, y, HIGH);
     } else if (panel == PANEL_BOTTOM) {
         sound_file = "bottom.wav";
-        for (int y = 8; y < 16; y++)
+        for (int y = 16; y < 24; y++)
             for (int x = 8; x < 16; x++)
                 set_pixel(x, y, HIGH);
     }
@@ -213,6 +242,8 @@ int main(void) {
     croix.setSide(CroixPharma::BOTH);
 
     setup_input();
+    atexit(restore_input);
+    setup_signal_handlers();
     clear_frame();
     send_frame();
 
@@ -237,7 +268,6 @@ int main(void) {
                             correct = true;
                         }
                     }
-                    // touche non-directionnelle ignorée silencieusement
                 }
                 if (loose) break;
             }
