@@ -214,10 +214,10 @@ void game_loose() {
     for (int i = 0; i < 5; i++) {
         fill_frame();
         send_frame();
-        usleep(200000);
+        usleep(100000);
         clear_frame();
         send_frame();
-        usleep(200000);
+        usleep(100000);
     }
 }
 
